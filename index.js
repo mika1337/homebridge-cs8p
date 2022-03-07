@@ -13,10 +13,12 @@ class Chronosoft8PuppeteerPlatformPlugin
     log('Chronosoft8Puppeteer Platform Plugin loaded');
 
     this.accessories = new Map();
+    this.shutters    = new Map();
 
     this.log    = log;
     this.config = config;
     this.api    = api;
+    this.initialized = false;
 
     api.on('didFinishLaunching', () =>
       {
@@ -38,6 +40,14 @@ class Chronosoft8PuppeteerPlatformPlugin
   {
     let log = this.log;
 
+    if ( this.initialized == true )
+    {
+      log('Shutters already initialized, skipping');
+      return;
+    }
+
+    this.initialized = true;
+
     // Initialize a set of existing uuids
     let cached_uuid = new Set();
     for ( const uuid of this.accessories.keys() )
@@ -46,18 +56,32 @@ class Chronosoft8PuppeteerPlatformPlugin
     }
 
     // Check if shutters match uuid
-    for( let shutter of shutterList )
+    for( let shutterData of shutterList )
     {
-      const uuid = this.api.hap.uuid.generate('CS8P shutter '+shutter['name']);
+      const name = shutterData['name'];
+      const uuid = this.api.hap.uuid.generate('CS8P shutter '+name);
+      let accessory = null;
+
       if ( this.accessories.has(uuid) )
       {
-        log('Shutter '+shutter['name']+' found in cached accessories');
+        // Grab cached accessory
+        log('Shutter '+name+' found in cached accessories');
         cached_uuid.delete(uuid);
+        accessory = this.accessories.get(uuid);
       }
       else
       {
-        log('Shutter '+shutter['name']+' not found in cached accessories');
+        // Create new accessory
+        log('Shutter '+name+' not found in cached accessories');
+        accessory = new this.api.platformAccessory('Volet '+name, uuid);
+        accessory.addService(this.api.hap.Service.WindowCovering);
+
+        this.api.registerPlatformAccessories('Chronosoft8PuppeteerPlugin', 'Chronosoft8PuppeteerPlatform', [accessory]);
+        this.accessories.set(uuid,accessory);
       }
+
+      let shutter = new RollingShutter(this.log,this.api,name,accessory,this.cs8p_ws);
+      this.shutters.set(uuid,shutter);
     }
 
     // Remove cached accessories not found
@@ -68,18 +92,6 @@ class Chronosoft8PuppeteerPlatformPlugin
       api.unregisterPlatformAccessories('Chronosoft8PuppeteerPlugin', 'Chronosoft8PuppeteerPlatform', [accessory]);
       this.accessories.delete(uuid);
     }
-  }
-
-  addAccessory()
-  {
-    let log = this.log;
-
-    log('Existing accessories: '+ this.accessories);
-
-    log('Add accessory');
-
-    let rollingShutter = new RollingShutterAccessory(log,this.api,'Cuisine');
-    this.api.registerPlatformAccessories('Chronosoft8PuppeteerPlugin', 'Chronosoft8PuppeteerPlatform', [rollingShutter.accessory]);
   }
 }
 
@@ -158,6 +170,12 @@ class Chronosoft8PuppeteerWebsocket
     }
   }
 
+  driveShutter( shutter, command )
+  {
+      let data = { command: 'drive_shutter', args: { command: command, shutter: shutter }};
+      this.sendData(data);
+  }
+
   onClose(event)
   {
     let log = this.log;
@@ -175,19 +193,19 @@ class Chronosoft8PuppeteerWebsocket
   }
 }
 
-class RollingShutterAccessory
+class RollingShutter
 {
-  constructor (log, api, name)
+  constructor (log, api, name, accessory, cs8p_ws)
   {
     this.log = log
     this.api = api
     this.name = name
+    this.cs8p_ws = cs8p_ws;
 
     this.position = 0;
 
-    this.uuid = this.api.hap.uuid.generate('CS8P shutter '+name);
-    this.accessory = new this.api.platformAccessory('Volet '+name, this.uuid);
-    this.service = this.accessory.addService(this.api.hap.Service.WindowCovering);
+    this.accessory = accessory;
+    this.service   = accessory.getService(this.api.hap.Service.WindowCovering);
 
     this.service.getCharacteristic(this.api.hap.Characteristic.CurrentPosition)
       .on('get', this.getPositionCharacteristicHandler.bind(this));
@@ -208,26 +226,27 @@ class RollingShutterAccessory
 
     log(this.name+': '+'Set position: '+value);
 
+    if ( value == 0 )
+    {
+      this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
+        .updateValue(this.api.hap.Characteristic.PositionState.DECREASING);
+
+      this.cs8p_ws.driveShutter(this.name,'down');
+    }
+    else if ( value == 100 )
+    {
+      this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
+        .updateValue(this.api.hap.Characteristic.PositionState.INCREASING);
+
+      this.cs8p_ws.driveShutter(this.name,'up');
+    }
+
     this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
-              .updateValue(this.api.hap.Characteristic.PositionState.INCREASING);
+      .updateValue(this.api.hap.Characteristic.PositionState.STOPPED);
+    this.service.getCharacteristic(this.api.hap.Characteristic.CurrentPosition)
+      .updateValue(value);
 
     callback(null);
-
-    clearTimeout(this.timer);
-    this.timer = setTimeout
-    (
-        function()
-        {
-            log(this.name+': '+'Setting to STOPPED');
-            this.position = value;
-
-            this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
-              .updateValue(this.api.hap.Characteristic.PositionState.STOPPED);
-
-            this.service.getCharacteristic(this.api.hap.Characteristic.CurrentPosition)
-              .updateValue(value);
-        }.bind(this), 2000
-    );
   }
 
   getPositionCharacteristicHandler (callback) {
