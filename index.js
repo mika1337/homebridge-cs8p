@@ -207,6 +207,12 @@ class RollingShutter
     this.accessory = accessory;
     this.service   = accessory.getService(this.api.hap.Service.WindowCovering);
 
+    this.accessory.getService(this.api.hap.Service.AccessoryInformation)
+      .setCharacteristic(this.api.hap.Characteristic.Manufacturer, 'Franciaflex ')
+      .setCharacteristic(this.api.hap.Characteristic.Model,        'Unknown')
+      .setCharacteristic(this.api.hap.Characteristic.SerialNumber, 'HB-CS8P-'+this.name);
+
+
     this.service.getCharacteristic(this.api.hap.Characteristic.CurrentPosition)
       .on('get', this.getPositionCharacteristicHandler.bind(this));
 
@@ -241,6 +247,7 @@ class RollingShutter
       this.cs8p_ws.driveShutter(this.name,'up');
     }
 
+    this.position = value;
     this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
       .updateValue(this.api.hap.Characteristic.PositionState.STOPPED);
     this.service.getCharacteristic(this.api.hap.Characteristic.CurrentPosition)
