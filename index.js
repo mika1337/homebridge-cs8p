@@ -202,7 +202,8 @@ class RollingShutter
     this.name = name
     this.cs8p_ws = cs8p_ws;
 
-    this.position = 0;
+    // Default position is unknown, set to intermediate value
+    this.position = 50;
 
     this.accessory = accessory;
     this.service   = accessory.getService(this.api.hap.Service.WindowCovering);
@@ -232,22 +233,35 @@ class RollingShutter
 
     log(this.name+': '+'Set position: '+value);
 
+    // Close shutter
     if ( value == 0 )
     {
       this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
         .updateValue(this.api.hap.Characteristic.PositionState.DECREASING);
 
       this.cs8p_ws.driveShutter(this.name,'down');
+
+      // Do not set to 0 to be able to command a closing multiple times
+      this.position = 1;
     }
+    // Open shutter
     else if ( value == 100 )
     {
       this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
         .updateValue(this.api.hap.Characteristic.PositionState.INCREASING);
 
       this.cs8p_ws.driveShutter(this.name,'up');
+
+      // Do not set to 100 to be able to command an opening multiple times
+      this.position = 99;
+    }
+    // Intermediate position (not supported)
+    else
+    {
+      this.position = value;
     }
 
-    this.position = value;
+    // Update state and position
     this.service.getCharacteristic(this.api.hap.Characteristic.PositionState)
       .updateValue(this.api.hap.Characteristic.PositionState.STOPPED);
     this.service.getCharacteristic(this.api.hap.Characteristic.CurrentPosition)
