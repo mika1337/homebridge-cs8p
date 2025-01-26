@@ -8,7 +8,9 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
-    "homebridge-plugin","homebridge","chronosoft8"
+    "homebridge-plugin",
+    "homebridge",
+    "chronosoft8"
   ],
   "engines": {
     "homebridge": ">=0.2.5"
@@ -17,5 +19,14 @@
     "ws": "^8.5.0"
   },
   "author": "Michael Bonhomme",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mika1337/homebridge-cs8p.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mika1337/homebridge-cs8p/issues"
+  },
+  "homepage": "https://github.com/mika1337/homebridge-cs8p#readme"
 }
